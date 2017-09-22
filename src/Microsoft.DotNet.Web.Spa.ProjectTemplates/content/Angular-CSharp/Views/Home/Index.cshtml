@@ -2,7 +2,7 @@
     ViewData["Title"] = "Home Page";
 }
 
-<app-root>Loading...</app-root>
+<app-root asp-prerender-module="ClientApp/dist-server/main.bundle">Loading...</app-root>
 
 @section scripts {
     <!-- TODO: Obtain these references dynamically -->
