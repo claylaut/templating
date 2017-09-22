@@ -1,6 +1,6 @@
 ﻿module.exports = {
     startAngularCliServer: function startAngularCliServer(callback, options) {
-        var deployUrl = '/dist'; // Should come from .angular-cli.json, but https://github.com/angular/angular-cli/issues/7347
+        var deployUrl = '/dist/'; // Should come from .angular-cli.json, but https://github.com/angular/angular-cli/issues/7347
 
         executeAngularCli([
             'serve',

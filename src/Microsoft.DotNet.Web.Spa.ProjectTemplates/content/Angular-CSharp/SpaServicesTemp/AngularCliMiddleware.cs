@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.NodeServices;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Microsoft.AspNetCore.SpaServices.AngularCli;
+using System.Linq;
 
 namespace Microsoft.AspNetCore.Builder
 {
@@ -79,13 +80,20 @@ namespace Microsoft.AspNetCore.Builder
             // Proxy the corresponding requests through ASP.NET and into the Node listener
             // Anything under /<publicpath> (e.g., /dist) is proxied as a normal HTTP request with a typical timeout (100s is the default from HttpClient),
             // plus the HMR endpoint is proxied with infinite timeout, because it's an EventSource (long-lived request).
-            foreach (var publicPath in angularCliServerInfo.PublicPaths)
+            foreach (var publicPath in angularCliServerInfo.PublicPaths.Select(RemoveTrailingSlash))
             {
                 // TODO: Proxy the HMR endpoint
                 // appBuilder.UseProxyToLocalAngularCliMiddleware(publicPath + hmrEndpoint, angularCliServerInfo.Port, Timeout.InfiniteTimeSpan);
 
                 appBuilder.UseProxyToLocalAngularCliMiddleware(publicPath, angularCliServerInfo.Port, TimeSpan.FromSeconds(100));
             }
+        }
+
+        private static string RemoveTrailingSlash(string str)
+        {
+            return str.EndsWith('/')
+                ? str.Substring(0, str.Length - 1)
+                : str;
         }
 
         private static void UseProxyToLocalAngularCliMiddleware(this IApplicationBuilder appBuilder, string publicPath, int proxyToPort, TimeSpan requestTimeout)
