@@ -31,10 +31,7 @@ namespace AngularSpa
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
-                app.UseWebpackDevMiddleware(new WebpackDevMiddlewareOptions
-                {
-                    HotModuleReplacement = true
-                });
+                app.UseAngularCliMiddleware("./ClientApp");
             }
             else
             {

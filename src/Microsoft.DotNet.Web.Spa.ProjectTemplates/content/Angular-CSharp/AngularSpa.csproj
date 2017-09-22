@@ -28,6 +28,14 @@
     <Content Remove="ClientApp\**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="SpaServicesTemp\angular-cli-middleware.js" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="SpaServicesTemp\angular-cli-middleware.js" />
+  </ItemGroup>
+
 <!--/-:cnd:noEmit -->
   <Target Name="DebugRunWebpack" BeforeTargets="Build" Condition=" '$(Configuration)' == 'Debug' And !Exists('wwwroot\dist') ">
     <!-- Ensure Node.js is installed -->
