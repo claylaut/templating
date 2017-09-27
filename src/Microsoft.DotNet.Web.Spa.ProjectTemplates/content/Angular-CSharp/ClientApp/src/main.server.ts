@@ -2,10 +2,17 @@ import 'reflect-metadata';
 import 'zone.js';
 import 'rxjs/add/operator/first';
 import { APP_BASE_HREF } from '@angular/common';
-import { enableProdMode, ApplicationRef, NgZone, ValueProvider } from '@angular/core';
-import { platformDynamicServer, PlatformState, INITIAL_CONFIG } from '@angular/platform-server';
+import { enableProdMode, ApplicationRef, NgModule, NgZone, ValueProvider } from '@angular/core';
+import { platformDynamicServer, PlatformState, ServerModule, INITIAL_CONFIG } from '@angular/platform-server';
 import { createServerRenderer, RenderResult } from 'aspnet-prerendering';
-import { AppServerModule } from './app/app.server.module';
+import { AppComponent } from './app/app.component';
+import { AppModule } from './app/app.module';
+
+@NgModule({
+    imports: [AppModule, ServerModule],
+    bootstrap: [AppComponent]
+})
+export class AppServerModule { }
 
 enableProdMode();
 
