@@ -3,17 +3,10 @@ import 'zone.js';
 import 'rxjs/add/operator/first';
 import { APP_BASE_HREF } from '@angular/common';
 import { enableProdMode, ApplicationRef, NgModule, NgZone, ValueProvider } from '@angular/core';
-import { platformDynamicServer, PlatformState, ServerModule, INITIAL_CONFIG } from '@angular/platform-server';
+import { platformDynamicServer, PlatformState, INITIAL_CONFIG } from '@angular/platform-server';
+import { AppServerModule } from './app/app.server.module';
 import { createServerRenderer, RenderResult } from 'aspnet-prerendering';
-import { AppComponent } from './app/app.component';
-import { AppModule } from './app/app.module';
 import * as requestPromise from 'request-promise-native';
-
-@NgModule({
-    imports: [AppModule, ServerModule],
-    bootstrap: [AppComponent]
-})
-export class AppServerModule { }
 
 enableProdMode();
 
