@@ -15,7 +15,7 @@ namespace Microsoft.AspNetCore.Builder
     {
         internal readonly static object IsSpaFallbackRequestTag = new object();
 
-        public static void UseSpaFallback(
+        public static void UseSpa(
             this IApplicationBuilder app,
             string publicPath,
             Action<SpaBuilder> setup = null,
@@ -111,6 +111,10 @@ namespace Microsoft.AspNetCore.Builder
 
                     // If some other SPA feature has to complete before prerendering, wait
                     // for that. For example, middleware might need to compile the entrypoint.
+                    // Currently, this is only used as a way of ensuring that AngularCliMiddleware
+                    // is listening for requests, as part of the workaround of fetching the
+                    // index.html template from the middleware instead of reading it from disk
+                    // (because @angular/cli doesn't write it to disk for 'server' builds).
                     if (!_startupTask.IsCompleted)
                     {
                         await _startupTask;

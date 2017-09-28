@@ -29,10 +29,6 @@ namespace AngularSpa
             {
                 app.UseDeveloperExceptionPage();
             }
-            else
-            {
-                app.UseExceptionHandler("/Home/Error");
-            }
 
             app.UseStaticFiles();
 
@@ -43,21 +39,23 @@ namespace AngularSpa
                     template: "{controller}/{action=Index}/{id?}");
             });
 
-            // Any other request will be handled by serving the index.html file from
-            // the publicPath specified here.
-            app.UseSpaFallback("/dist", spa =>
+            // Handles any other request by serving the Angular application from the
+            // specified public URL path
+            app.UseSpa(publicPath: "/dist", setup: spa =>
             {
+                /*
                 // If you want to enable server-side prerendering for your app, then:
                 // [1] Edit your application .csproj file and set the BuildServerSideRenderer
                 //     property to 'true' so that the entrypoint file is built on publish
-                // [2] Uncomment the following lines
-                //spa.UsePrerendering("ClientApp/dist-server/main.bundle.js",
-                //    buildOnDemand: env.IsDevelopment() ? new AngularCliBuild("ssr") : null);
+                // [2] Uncomment this code block
+                spa.UsePrerendering("ClientApp/dist-server/main.bundle.js",
+                    buildOnDemand: env.IsDevelopment() ? new AngularCliBuild("ssr") : null);
+                */
 
-                // During development, files under '/dist' will be served using the
-                // Angular CLI server. In production, they will be static files on disk.
                 if (env.IsDevelopment())
                 {
+                    // In development, the Angular application does not have to be built
+                    // already, as it will be served dynamically via the Angular CLI
                     spa.UseAngularCliMiddleware(sourcePath: "./ClientApp");
                 }
             });
