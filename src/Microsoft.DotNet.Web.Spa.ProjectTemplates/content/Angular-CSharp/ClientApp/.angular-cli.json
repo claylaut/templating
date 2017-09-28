@@ -31,7 +31,7 @@
     {
       "name": "ssr",
       "root": "src",
-      "outDir": "dist-ssr",
+      "outDir": "dist-server",
       "assets": [
         "assets"
       ],

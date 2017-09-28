@@ -4,18 +4,19 @@ var readline = require('readline');
 var url = require('url');
 
 module.exports = {
-    startAngularCliServer: function startAngularCliServer(callback, options) {
-        // Start an @angular/cli instance to watch and write SSR
-        // builds to the /dist-server dir
-        // TODO: Make server-side rendering optional via flag in Startup.cs
-        // TODO: Make asp-prerender-module wait until the files exist on disk
-        executeAngularCli([
+    startAngularCliBuilder: function startAngularCliBuilder(callback, options) {    
+        var proc = executeAngularCli([
             'build',
-            '-app', 'ssr',
-            '--watch',
-            '--output-path', 'dist-server'
+            '-app', options.appName,
+            '--watch'
         ]);
+        proc.stdout.pipe(process.stdout);
+        waitForLine(proc.stdout, /chunk/).then(function () {
+            callback();
+        });
+    },
 
+    startAngularCliServer: function startAngularCliServer(callback, options) {
         getOSAssignedPortNumber().then(function (portNumber) {
             // Start @angular/cli dev server on private port, and pipe its output
             // back to the ASP.NET host process.
@@ -31,24 +32,29 @@ module.exports = {
 
             // Wait until the CLI dev server is listening before letting ASP.NET start the app
             console.log('Waiting for @angular/cli service to start...');
-            var readySignal = /open your browser on (http\S+)/;
-            var lineReader = readline
-                .createInterface({ input: devServerProc.stdout })
-                .on('line', function (line) {
-                    var matches = readySignal.exec(line);
-                    if (matches) {
-                        var devServerUrl = url.parse(matches[1]);
-                        console.log('@angular/cli service has started on internal port ' + devServerUrl.port);
-                        callback(null, {
-                            Port: parseInt(devServerUrl.port),
-                            PublicPaths: [devServerUrl.path]
-                        });
-                        lineReader.close();
-                    }
+            waitForLine(devServerProc.stdout, /open your browser on (http\S+)/).then(function (matches) {
+                var devServerUrl = url.parse(matches[1]);
+                console.log('@angular/cli service has started on internal port ' + devServerUrl.port);
+                callback(null, {
+                    Port: parseInt(devServerUrl.port)
                 });
+            });
         });
     }
 };
+
+function waitForLine(stream, regex) {
+    return new Promise(function (resolve, reject) {
+        var lineReader = readline.createInterface({ input: stream });
+        lineReader.on('line', function (line) {
+            var matches = regex.exec(line);
+            if (matches) {
+                lineReader.close();
+                resolve(matches);
+            }
+        });
+    });
+}
 
 function executeAngularCli(args) {
     var angularCliBin = require.resolve('@angular/cli/bin/ng');

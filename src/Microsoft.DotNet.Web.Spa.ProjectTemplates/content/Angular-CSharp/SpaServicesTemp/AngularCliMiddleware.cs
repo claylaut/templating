@@ -4,48 +4,58 @@ using Microsoft.AspNetCore.NodeServices;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Microsoft.AspNetCore.SpaServices.AngularCli;
-using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Builder;
 
-namespace Microsoft.AspNetCore.Builder
+namespace AngularSpa.SpaServicesTemp
 {
     /// <summary>
     /// Extension methods that can be used to enable Angular CLI middleware support.
     /// </summary>
-    public static class AngularCliMiddleware
+    internal class AngularCliMiddleware
     {
+        private INodeServices _nodeServices;
+        private string _middlewareScriptPath;
+
         private static readonly JsonSerializerSettings jsonSerializerSettings = new JsonSerializerSettings
         {
             ContractResolver = new CamelCasePropertyNamesContractResolver(),
             TypeNameHandling = TypeNameHandling.None
         };
 
-        /// <summary>
-        /// Enables Angular CLI middleware support. This hosts an instance of the Angular CLI in memory in
-        /// your application so that you can always serve up-to-date CLI-built resources without having
-        /// to run CLI server manually.
-        ///
-        /// Incoming requests that match Angular CLI-built files will be handled by returning the CLI server
-        /// output directly.
-        ///
-        /// This feature should only be used in development. For production deployments, be sure not to
-        /// enable Angular CLI middleware.
-        /// </summary>
-        /// <param name="appBuilder">The <see cref="IApplicationBuilder"/>.</param>
-        /// <param name="options">Options for configuring the Angular CLI instance.</param>
-        public static void UseAngularCliMiddleware(
-            this IApplicationBuilder appBuilder,
-            string angularAppRoot,
-            Action<AngularCliMiddlewareOptions> configureOptions = null)
+        public AngularCliMiddleware(
+            string sourcePath,
+            Action<AngularCliMiddlewareOptions> configureOptions,
+            SpaBuilder spaBuilder)
         {
-            if (angularAppRoot == null)
+            if (string.IsNullOrEmpty(sourcePath))
             {
-                throw new ArgumentNullException(nameof(angularAppRoot));
+                throw new ArgumentException("Cannot be null or empty", nameof(sourcePath));
             }
 
             // Prepare options
             var options = new AngularCliMiddlewareOptions();
             configureOptions?.Invoke(options);
 
+            // Start middleware service and attach to middleware pipeline
+            var appBuilder = spaBuilder.AppBuilder;
+            PrepareNodeServicesInstance(appBuilder, sourcePath, options);
+            var angularCliServerInfoTask = StartAngularCliServerAsync();
+            spaBuilder.AddStartupTask(angularCliServerInfoTask);
+
+            // Proxy the corresponding requests through ASP.NET and into the Node listener
+            // Anything under /<publicpath> (e.g., /dist) is proxied as a normal HTTP request with a typical timeout (100s is the default from HttpClient),
+            UseProxyToLocalAngularCliMiddleware(appBuilder, spaBuilder.PublicPath, angularCliServerInfoTask, TimeSpan.FromSeconds(100));
+
+            // TODO: Proxy the HMR endpoint with infinite timeout, because it's an EventSource (long-lived request).
+            // appBuilder.UseProxyToLocalAngularCliMiddleware(publicPath + hmrEndpoint, angularCliServerInfo.Port, Timeout.InfiniteTimeSpan);
+
+            // Advertise the availability of this feature to other SPA middleware
+            spaBuilder.Properties.Add(this, null);
+        }
+
+        private void PrepareNodeServicesInstance(IApplicationBuilder appBuilder, string sourcePath, AngularCliMiddlewareOptions options)
+        {
             // Unlike other consumers of NodeServices, AngularCliMiddleware dosen't share Node instances, nor does it
             // use your DI configuration. It's important for AngularCliMiddleware to have its own private Node instance
             // because it must *not* restart when files change (it's designed to watch for changes and rebuild).
@@ -53,7 +63,7 @@ namespace Microsoft.AspNetCore.Builder
             nodeServicesOptions.WatchFileExtensions = new string[] { }; // Don't watch anything
             nodeServicesOptions.ProjectPath = Path.Combine(
                 Directory.GetCurrentDirectory(),
-                angularAppRoot);
+                sourcePath);
 
             if (options.EnvironmentVariables != null)
             {
@@ -63,30 +73,37 @@ namespace Microsoft.AspNetCore.Builder
                 }
             }
 
-            var nodeServices = NodeServicesFactory.CreateNodeServices(nodeServicesOptions);
+            _nodeServices = NodeServicesFactory.CreateNodeServices(nodeServicesOptions);
 
             // Get a filename matching the middleware Node script
             var script = EmbeddedResourceReader.Read(typeof(AngularCliMiddleware),
                 "/SpaServicesTemp/angular-cli-middleware.js");
             var nodeScript = new StringAsTempFile(script, nodeServicesOptions.ApplicationStoppingToken); // Will be cleaned up on process exit
-            var nodeScriptFilename = nodeScript.FileName;
+            _middlewareScriptPath = nodeScript.FileName;
+        }
 
+        private async Task<AngularCliServerInfo> StartAngularCliServerAsync()
+        {
             // Tell Node to start the server hosting the Angular CLI
-            var angularCliOptions = new {};
+            var angularCliOptions = new { };
             var angularCliServerInfo =
-                nodeServices.InvokeExportAsync<AngularCliServerInfo>(nodeScript.FileName, "startAngularCliServer",
-                    JsonConvert.SerializeObject(angularCliOptions, jsonSerializerSettings)).Result;
+                await _nodeServices.InvokeExportAsync<AngularCliServerInfo>(_middlewareScriptPath, "startAngularCliServer",
+                    JsonConvert.SerializeObject(angularCliOptions, jsonSerializerSettings));
 
-            // Proxy the corresponding requests through ASP.NET and into the Node listener
-            // Anything under /<publicpath> (e.g., /dist) is proxied as a normal HTTP request with a typical timeout (100s is the default from HttpClient),
-            // plus the HMR endpoint is proxied with infinite timeout, because it's an EventSource (long-lived request).
-            foreach (var publicPath in angularCliServerInfo.PublicPaths.Select(RemoveTrailingSlash))
-            {
-                // TODO: Proxy the HMR endpoint
-                // appBuilder.UseProxyToLocalAngularCliMiddleware(publicPath + hmrEndpoint, angularCliServerInfo.Port, Timeout.InfiniteTimeSpan);
+            // Even after the Angular CLI claims to be listening for requests, there's a short
+            // period where it will give an error if you make a request too quickly. Give it
+            // a moment to finish starting up.
+            await Task.Delay(500);
 
-                appBuilder.UseProxyToLocalAngularCliMiddleware(publicPath, angularCliServerInfo.Port, TimeSpan.FromSeconds(100));
-            }
+            return angularCliServerInfo;
+        }
+
+        public Task StartAngularCliBuilderAsync(string cliAppName)
+        {
+            return _nodeServices.InvokeExportAsync<AngularCliServerInfo>(
+                _middlewareScriptPath,
+                "startAngularCliBuilder",
+                /* options */ new { appName = cliAppName });
         }
 
         private static string RemoveTrailingSlash(string str)
@@ -96,7 +113,7 @@ namespace Microsoft.AspNetCore.Builder
                 : str;
         }
 
-        private static void UseProxyToLocalAngularCliMiddleware(this IApplicationBuilder appBuilder, string publicPath, int proxyToPort, TimeSpan requestTimeout)
+        private static void UseProxyToLocalAngularCliMiddleware(IApplicationBuilder appBuilder, string publicPath, Task<AngularCliServerInfo> serverInfo, TimeSpan requestTimeout)
         {
             // Note that this is hardcoded to make requests to "localhost" regardless of the hostname of the
             // server as far as the client is concerned. This is because ConditionalProxyMiddlewareOptions is
@@ -108,8 +125,9 @@ namespace Microsoft.AspNetCore.Builder
             // the CLI server has no need for HTTPS (the client doesn't see it directly - all traffic
             // to it is proxied), and the CLI service couldn't use HTTPS anyway (in general it wouldn't have
             // the necessary certificate).
+            var determinePortTask = serverInfo.ContinueWith(infoTask => infoTask.Result.Port.ToString());
             var proxyOptions = new ConditionalProxyMiddlewareOptions(
-                "http", "localhost", proxyToPort.ToString(), requestTimeout);
+                "http", "localhost", determinePortTask, requestTimeout);
             appBuilder.UseMiddleware<ConditionalProxyMiddleware>(publicPath, proxyOptions);
         }
 
@@ -117,7 +135,6 @@ namespace Microsoft.AspNetCore.Builder
         class AngularCliServerInfo
         {
             public int Port { get; set; }
-            public string[] PublicPaths { get; set; }
         }
     }
 #pragma warning restore CS0649

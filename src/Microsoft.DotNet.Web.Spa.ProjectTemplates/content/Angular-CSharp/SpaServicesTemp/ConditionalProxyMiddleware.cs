@@ -58,6 +58,10 @@ namespace Microsoft.AspNetCore.SpaServices.AngularCli
 
         private async Task<bool> PerformProxyRequest(HttpContext context)
         {
+            // We don't know the target port until the upstream service finishes initializing
+            // By the time this task completes, we know the upstream service is ready for requests
+            var targetPort = _options.Port.Result;
+
             var requestMessage = new HttpRequestMessage();
 
             // Copy the request headers
@@ -69,9 +73,9 @@ namespace Microsoft.AspNetCore.SpaServices.AngularCli
                 }
             }
 
-            requestMessage.Headers.Host = _options.Host + ":" + _options.Port;
+            requestMessage.Headers.Host = _options.Host + ":" + targetPort;
             var uriString =
-                $"{_options.Scheme}://{_options.Host}:{_options.Port}{context.Request.Path}{context.Request.QueryString}";
+                $"{_options.Scheme}://{_options.Host}:{targetPort}{context.Request.Path}{context.Request.QueryString}";
             requestMessage.RequestUri = new Uri(uriString);
             requestMessage.Method = new HttpMethod(context.Request.Method);
 

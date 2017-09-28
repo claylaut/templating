@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.SpaServices.Webpack;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -23,6 +18,8 @@ namespace AngularSpa
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddMvc();
+            services.AddNodeServices();
+            services.AddSpaPrerenderer(); // TODO: Make this unnecessary by making UsePrerendering able to get a default instance if not explicitly registered
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -31,7 +28,6 @@ namespace AngularSpa
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
-                app.UseAngularCliMiddleware("./ClientApp");
             }
             else
             {
@@ -44,11 +40,26 @@ namespace AngularSpa
             {
                 routes.MapRoute(
                     name: "default",
-                    template: "{controller=Home}/{action=Index}/{id?}");
+                    template: "{controller}/{action=Index}/{id?}");
+            });
 
-                routes.MapSpaFallbackRoute(
-                    name: "spa-fallback",
-                    defaults: new { controller = "Home", action = "Index" });
+            // Any other request will be handled by serving the index.html file from
+            // the publicPath specified here.
+            app.UseSpaFallback("/dist", spa =>
+            {
+                // If you want to enable server-side prerendering for your app, then:
+                // [1] Edit your application .csproj file and set the BuildServerSideRenderer
+                //     property to 'true' so that the entrypoint file is built on publish
+                // [2] Uncomment the following lines
+                //spa.UsePrerendering("ClientApp/dist-server/main.bundle.js",
+                //    buildOnDemand: env.IsDevelopment() ? new AngularCliBuild("ssr") : null);
+
+                // During development, files under '/dist' will be served using the
+                // Angular CLI server. In production, they will be static files on disk.
+                if (env.IsDevelopment())
+                {
+                    spa.UseAngularCliMiddleware(sourcePath: "./ClientApp");
+                }
             });
         }
     }
